@@ -1,0 +1,70 @@
+{
+  "name": "better-auth-razorpay",
+  "version": "1.0.0",
+  "description": "A Razorpay plugin for Better Auth, enabling seamless subscription and payment integration.",
+  "main": "dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.mjs",
+      "require": "./dist/client.cjs"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/index.d.ts"
+      ],
+      "client": [
+        "./dist/client.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "unbuild",
+    "dev": "unbuild --watch",
+    "test": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iamjasonkendrick/better-auth-razorpay.git"
+  },
+  "keywords": [
+    "razorpay",
+    "better-auth",
+    "auth",
+    "payment",
+    "subscription"
+  ],
+  "author": "Jason Richard Kendrick",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/iamjasonkendrick/better-auth-razorpay/issues"
+  },
+  "homepage": "https://github.com/iamjasonkendrick/better-auth-razorpay#readme",
+  "dependencies": {
+    "better-auth": "^1.2.9",
+    "zod": "^3.25.62"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "better-call": "^1.0.9",
+    "better-sqlite3": "^11.10.0",
+    "razorpay": "^2.9.6",
+    "typescript": "^5.8.3",
+    "unbuild": "^3.5.0",
+    "vitest": "^3.2.3"
+  }
+}

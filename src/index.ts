@@ -24,7 +24,12 @@ import type {
   RazorpayPlan,
   Subscription,
 } from "./types";
-import { getPlanByName, getPlanByRazorpayId, getPlans } from "./utils";
+import {
+  extractRazorpayErrorMessage,
+  getPlanByName,
+  getPlanByRazorpayId,
+  getPlans,
+} from "./utils";
 
 // SECTION 1: CONSTANTS AND HELPERS (Mirrors Stripe Plugin)
 // =================================================================
@@ -69,7 +74,7 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
 
   const referenceMiddleware = (
     action:
-      | "create-subscription" // Covers Stripe's 'upgrade-subscription' concept
+      | "create-subscription"
       | "list-subscription"
       | "cancel-subscription"
       | "restore-subscription"
@@ -220,8 +225,11 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
             });
             customerId = rzpCustomer.id;
           } catch (e: any) {
+            // Razorpay errors don't have a standard 'message' property
+            // They typically have 'error' or 'description' properties
+            const errorMessage = extractRazorpayErrorMessage(e);
             logger.error(
-              `Razorpay: Failed to create customer for ${user.email}: ${e.message}`
+              `Razorpay: Failed to create customer for ${user.email}: ${errorMessage}`
             );
             throw new APIError("INTERNAL_SERVER_ERROR", {
               message: RAZORPAY_ERROR_CODES.UNABLE_TO_CREATE_CUSTOMER,
@@ -284,8 +292,9 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
           try {
             await client.subscriptions.cancel(rzpSub.id, true);
           } catch (cancelError: any) {
+            const errorMessage = extractRazorpayErrorMessage(cancelError);
             logger.error(
-              `CRITICAL: Failed to cancel orphaned Razorpay subscription ${rzpSub.id}: ${cancelError.message}`
+              `CRITICAL: Failed to cancel orphaned Razorpay subscription ${rzpSub.id}: ${errorMessage}`
             );
           }
           throw new APIError("INTERNAL_SERVER_ERROR", {
@@ -585,8 +594,9 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
             }
           }
         } catch (error: any) {
+          const errorMessage = extractRazorpayErrorMessage(error);
           logger.error(
-            `Error in Razorpay subscriptionSuccess for localSubId ${localSubscriptionId}: ${error.message}`
+            `Error in Razorpay subscriptionSuccess for localSubId ${localSubscriptionId}: ${errorMessage}`
           );
         }
         return ctx.redirect(getUrl(ctx, callbackURL as string));
@@ -675,8 +685,9 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
             // Call the global onEvent handler if provided
             await options.onEvent?.(event);
           } catch (e: any) {
+            const errorMessage = extractRazorpayErrorMessage(e);
             logger.error(
-              `Razorpay webhook failed during event processing for event '${event.event}'. Error: ${e.message}`
+              `Razorpay webhook failed during event processing for event '${event.event}'. Error: ${errorMessage}`
             );
             // It's crucial to still return a 200 OK to Razorpay to prevent retries
             // for errors on our side. The error is logged for debugging.
@@ -738,8 +749,9 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
                         );
                       }
                     } catch (error: any) {
+                      const errorMessage = extractRazorpayErrorMessage(error);
                       logger.error(
-                        `#BETTER_AUTH_RAZORPAY: Failed to create Razorpay customer for user ${user.id}. Error: ${error.message}`
+                        `#BETTER_AUTH_RAZORPAY: Failed to create Razorpay customer for user ${user.id}. Error: ${errorMessage}`
                       );
                     }
                   }

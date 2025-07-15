@@ -1,6 +1,6 @@
 import { type GenericEndpointContext, logger } from "better-auth";
 import type { InputSubscription, RazorpayOptions, Subscription } from "./types";
-import { getPlanByRazorpayId } from "./utils";
+import { extractRazorpayErrorMessage, getPlanByRazorpayId } from "./utils";
 
 /**
  * Handles the 'subscription.activated' webhook from Razorpay.
@@ -88,8 +88,9 @@ export async function onSubscriptionActivated(
       plan,
     });
   } catch (e: any) {
+    const errorMessage = extractRazorpayErrorMessage(e);
     logger.error(
-      `Razorpay webhook 'subscription.activated' failed. Error: ${e.message}`
+      `Razorpay webhook 'subscription.activated' failed. Error: ${errorMessage}`
     );
   }
 }
@@ -147,8 +148,9 @@ export async function onSubscriptionUpdated(
       subscription,
     });
   } catch (e: any) {
+    const errorMessage = extractRazorpayErrorMessage(e);
     logger.error(
-      `Razorpay webhook 'subscription.updated' failed. Error: ${e.message}`
+      `Razorpay webhook 'subscription.updated' failed. Error: ${errorMessage}`
     );
   }
 }
@@ -195,8 +197,9 @@ export async function onSubscriptionCancelled(
       );
     }
   } catch (e: any) {
+    const errorMessage = extractRazorpayErrorMessage(e);
     logger.error(
-      `Razorpay webhook 'subscription.cancelled' failed. Error: ${e.message}`
+      `Razorpay webhook 'subscription.cancelled' failed. Error: ${errorMessage}`
     );
   }
 }

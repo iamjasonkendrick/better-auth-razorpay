@@ -5,6 +5,9 @@ import { validateWebhookSignature } from 'razorpay/dist/utils/razorpay-utils';
 import { z } from 'zod';
 import { mergeSchema } from 'better-auth/db';
 
+function extractRazorpayErrorMessage(error) {
+  return error.error?.description || error.error?.message || error.description || error.message || error.toString() || "Unknown error";
+}
 async function getPlans(options) {
   if (!options.subscription?.plans) {
     return [];
@@ -86,8 +89,9 @@ async function onSubscriptionActivated(ctx, options, event) {
       plan
     });
   } catch (e) {
+    const errorMessage = extractRazorpayErrorMessage(e);
     logger.error(
-      `Razorpay webhook 'subscription.activated' failed. Error: ${e.message}`
+      `Razorpay webhook 'subscription.activated' failed. Error: ${errorMessage}`
     );
   }
 }
@@ -129,8 +133,9 @@ async function onSubscriptionUpdated(ctx, options, event) {
       subscription
     });
   } catch (e) {
+    const errorMessage = extractRazorpayErrorMessage(e);
     logger.error(
-      `Razorpay webhook 'subscription.updated' failed. Error: ${e.message}`
+      `Razorpay webhook 'subscription.updated' failed. Error: ${errorMessage}`
     );
   }
 }
@@ -165,8 +170,9 @@ async function onSubscriptionCancelled(ctx, options, event) {
       );
     }
   } catch (e) {
+    const errorMessage = extractRazorpayErrorMessage(e);
     logger.error(
-      `Razorpay webhook 'subscription.cancelled' failed. Error: ${e.message}`
+      `Razorpay webhook 'subscription.cancelled' failed. Error: ${errorMessage}`
     );
   }
 }
@@ -392,8 +398,9 @@ const razorpay = (options) => {
             });
             customerId = rzpCustomer.id;
           } catch (e) {
+            const errorMessage = extractRazorpayErrorMessage(e);
             logger.error(
-              `Razorpay: Failed to create customer for ${user.email}: ${e.message}`
+              `Razorpay: Failed to create customer for ${user.email}: ${errorMessage}`
             );
             throw new APIError("INTERNAL_SERVER_ERROR", {
               message: RAZORPAY_ERROR_CODES.UNABLE_TO_CREATE_CUSTOMER
@@ -444,8 +451,9 @@ const razorpay = (options) => {
           try {
             await client.subscriptions.cancel(rzpSub.id, true);
           } catch (cancelError) {
+            const errorMessage = extractRazorpayErrorMessage(cancelError);
             logger.error(
-              `CRITICAL: Failed to cancel orphaned Razorpay subscription ${rzpSub.id}: ${cancelError.message}`
+              `CRITICAL: Failed to cancel orphaned Razorpay subscription ${rzpSub.id}: ${errorMessage}`
             );
           }
           throw new APIError("INTERNAL_SERVER_ERROR", {
@@ -702,8 +710,9 @@ const razorpay = (options) => {
             }
           }
         } catch (error) {
+          const errorMessage = extractRazorpayErrorMessage(error);
           logger.error(
-            `Error in Razorpay subscriptionSuccess for localSubId ${localSubscriptionId}: ${error.message}`
+            `Error in Razorpay subscriptionSuccess for localSubId ${localSubscriptionId}: ${errorMessage}`
           );
         }
         return ctx.redirect(getUrl(ctx, callbackURL));
@@ -780,8 +789,9 @@ const razorpay = (options) => {
             }
             await options.onEvent?.(event);
           } catch (e) {
+            const errorMessage = extractRazorpayErrorMessage(e);
             logger.error(
-              `Razorpay webhook failed during event processing for event '${event.event}'. Error: ${e.message}`
+              `Razorpay webhook failed during event processing for event '${event.event}'. Error: ${errorMessage}`
             );
           }
           return ctx.json({ success: true });
@@ -832,8 +842,9 @@ const razorpay = (options) => {
                         );
                       }
                     } catch (error) {
+                      const errorMessage = extractRazorpayErrorMessage(error);
                       logger.error(
-                        `#BETTER_AUTH_RAZORPAY: Failed to create Razorpay customer for user ${user.id}. Error: ${error.message}`
+                        `#BETTER_AUTH_RAZORPAY: Failed to create Razorpay customer for user ${user.id}. Error: ${errorMessage}`
                       );
                     }
                   }

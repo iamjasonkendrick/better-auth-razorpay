@@ -46,6 +46,8 @@ const RAZORPAY_ERROR_CODES = {
   SUBSCRIPTION_NOT_CANCELLABLE: "Subscription cannot be cancelled",
   SUBSCRIPTION_NOT_SCHEDULED_FOR_CANCELLATION:
     "Subscription is not scheduled for cancellation",
+  UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED:
+    "Subscriptions cannot be updated when payment mode is UPI",
   // Add any other Razorpay specific error messages if needed
 } as const;
 
@@ -185,6 +187,39 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
               message: RAZORPAY_ERROR_CODES.ALREADY_SUBSCRIBED_PLAN,
             });
           }
+
+          // Check payment mode before attempting update
+          try {
+            const currentRzpSub = await client.subscriptions.fetch(
+              existingSubscription.razorpaySubscriptionId
+            );
+
+            // Check if the subscription uses UPI payment mode
+            if (currentRzpSub.payment_method === "upi") {
+              throw new APIError("BAD_REQUEST", {
+                message:
+                  RAZORPAY_ERROR_CODES.UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED,
+              });
+            }
+          } catch (e: any) {
+            // If it's our UPI error, re-throw it
+            if (
+              e.message ===
+              RAZORPAY_ERROR_CODES.UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED
+            ) {
+              throw e;
+            }
+
+            // If it's a Razorpay API error, log it and throw a generic error
+            const errorMessage = extractRazorpayErrorMessage(e);
+            logger.error(
+              `Razorpay: Failed to fetch subscription ${existingSubscription.razorpaySubscriptionId} for payment mode check: ${errorMessage}`
+            );
+            throw new APIError("INTERNAL_SERVER_ERROR", {
+              message: "Failed to verify subscription payment mode",
+            });
+          }
+
           // Use Razorpay's upgrade API.
           const updatedRzpSub = await client.subscriptions.update(
             // Changed 'upgrade' to 'update'

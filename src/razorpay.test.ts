@@ -4,14 +4,10 @@ import { createAuthClient } from "better-auth/client";
 import { setCookieToHeader } from "better-auth/cookies";
 import { bearer } from "better-auth/plugins";
 import type Razorpay from "razorpay";
-import { vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { razorpayClient } from "./client";
-import {
-  razorpay,
-  type InputSubscription,
-  type RazorpayPlan,
-  type Subscription,
-} from "./index";
+import { razorpay, type RazorpayPlan, type Subscription } from "./index";
+import type { InputSubscription } from "./types";
 
 // Mock the Razorpay SDK's utility functions for webhook verification
 vi.mock("razorpay/dist/utils/razorpay-utils", () => ({
@@ -55,8 +51,8 @@ describe("razorpay", async () => {
     subscription: {
       enabled: true,
       plans: [
-        { name: "starter", razorpayPlanId: "plan_starter_mock" },
-        { name: "premium", razorpayPlanId: "plan_premium_mock" },
+        { name: "starter", monthlyPlanId: "plan_starter_mock" },
+        { name: "premium", monthlyPlanId: "plan_premium_mock" },
       ] as RazorpayPlan[],
     },
   };
@@ -134,14 +130,14 @@ describe("razorpay", async () => {
     const { headers } = await getHeader();
 
     // Action: Call the endpoint to create a subscription.
-    const res = await authClient.subscription.createOrUpdateSubscription({
+    const res = await authClient.subscription.createOrUpdate({
       plan: "starter",
       fetchOptions: { headers },
     });
 
     // Verification: Check the client response for the checkout URL.
-    expect(res.data?.checkoutUrl).toBeDefined();
-    expect(res.data?.redirect).toBe(true);
+    expect((res.data as any)?.checkoutUrl).toBeDefined();
+    expect((res.data as any)?.redirect).toBe(true);
 
     // Verification: Check if the Razorpay mock for subscription creation was called.
     expect(mockRazorpay.subscriptions.create).toHaveBeenCalledWith(
@@ -171,7 +167,7 @@ describe("razorpay", async () => {
     expect(listRes.data).toEqual([]);
 
     // Action: Create a subscription (it will have 'created' status).
-    await authClient.subscription.createOrUpdateSubscription({
+    await authClient.subscription.createOrUpdate({
       plan: "starter",
       fetchOptions: { headers },
     });
@@ -208,7 +204,7 @@ describe("razorpay", async () => {
     });
 
     // Action: Call the endpoint with a new plan.
-    await authClient.subscription.createOrUpdateSubscription({
+    await authClient.subscription.createOrUpdate({
       plan: "premium",
       fetchOptions: { headers },
     });
@@ -239,7 +235,7 @@ describe("razorpay", async () => {
     });
 
     // Action: Call the endpoint for the same plan but with more seats.
-    await authClient.subscription.createOrUpdateSubscription({
+    await authClient.subscription.createOrUpdate({
       plan: "premium",
       seats: 5,
       fetchOptions: { headers },
@@ -375,7 +371,7 @@ describe("razorpay", async () => {
     });
 
     // Action: Attempt to create a subscription for the exact same plan and seats again.
-    const res = await authClient.subscription.createOrUpdateSubscription({
+    const res = await authClient.subscription.createOrUpdate({
       plan: "starter",
       seats: 1,
       fetchOptions: { headers },

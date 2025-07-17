@@ -264,9 +264,12 @@ const RAZORPAY_ERROR_CODES = {
   SUBSCRIPTION_PLAN_NOT_FOUND: "Subscription plan not found",
   ALREADY_SUBSCRIBED_PLAN: "You're already subscribed to this plan",
   UNABLE_TO_CREATE_CUSTOMER: "Unable to create customer",
+  FAILED_TO_FETCH_PLANS: "Failed to fetch plans",
   EMAIL_VERIFICATION_REQUIRED: "Email verification is required before you can subscribe to a plan",
+  SUBSCRIPTION_NOT_ACTIVE: "Subscription is not active",
   SUBSCRIPTION_NOT_CANCELLABLE: "Subscription cannot be cancelled",
-  SUBSCRIPTION_NOT_SCHEDULED_FOR_CANCELLATION: "Subscription is not scheduled for cancellation"
+  SUBSCRIPTION_NOT_SCHEDULED_FOR_CANCELLATION: "Subscription is not scheduled for cancellation",
+  UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED: "Subscriptions cannot be updated when payment mode is UPI"
   // Add any other Razorpay specific error messages if needed
 };
 const getUrl = (ctx, url) => {
@@ -362,6 +365,27 @@ const razorpay = (options) => {
           if (existingSubscription.plan === plan.name.toLowerCase() && existingSubscription.seats === ctx.body.seats) {
             throw new api.APIError("BAD_REQUEST", {
               message: RAZORPAY_ERROR_CODES.ALREADY_SUBSCRIBED_PLAN
+            });
+          }
+          try {
+            const currentRzpSub = await client.subscriptions.fetch(
+              existingSubscription.razorpaySubscriptionId
+            );
+            if (currentRzpSub.payment_method === "upi") {
+              throw new api.APIError("BAD_REQUEST", {
+                message: RAZORPAY_ERROR_CODES.UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED
+              });
+            }
+          } catch (e) {
+            if (e.message === RAZORPAY_ERROR_CODES.UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED) {
+              throw e;
+            }
+            const errorMessage = extractRazorpayErrorMessage(e);
+            betterAuth.logger.error(
+              `Razorpay: Failed to fetch subscription ${existingSubscription.razorpaySubscriptionId} for payment mode check: ${errorMessage}`
+            );
+            throw new api.APIError("INTERNAL_SERVER_ERROR", {
+              message: "Failed to verify subscription payment mode"
             });
           }
           const updatedRzpSub = await client.subscriptions.update(

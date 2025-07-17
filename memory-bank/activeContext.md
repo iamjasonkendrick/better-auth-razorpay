@@ -1,104 +1,89 @@
-# Active Context: Interval Removal & UPI Error Handling
+# Active Context: UPI Error Handling Implementation
 
 ## Current Focus
 
-✅ **COMPLETED**: Removed interval functionality and added UPI payment mode error handling
+✅ **COMPLETED**: UPI payment mode error handling has been fully implemented
 
 ## Changes Made
 
-The interval functionality has been completely removed and UPI payment mode validation added:
+The UPI payment mode validation has been successfully implemented:
 
-### 1. Type System Cleanup
+### 1. Error Code Addition
 
-- Removed `interval` field from `Subscription` interface
-- Removed `interval` field from `RazorpayPlan` interface
-- Simplified type definitions
+- Added `UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED` error code to `RAZORPAY_ERROR_CODES`
+- Error message: "Subscriptions cannot be updated when payment mode is UPI"
 
-### 2. Database Schema Simplification
+### 2. Payment Mode Validation
 
-- Removed `interval` field from subscription table
-- Cleaner, simpler database structure
+- Added pre-update payment mode check in subscription update flow
+- Fetches current subscription from Razorpay to check payment method
+- Validates against UPI payment mode before allowing updates
+- Comprehensive error handling for API failures during validation
 
-### 3. Core Logic Updates
+### 3. Error Handling Implementation
 
-- Removed interval storage from subscription creation
-- Removed interval updates from subscription upgrades
-- Simplified subscription operations
-- Added UPI payment mode validation before updates
-
-### 4. API Endpoint Cleanup
-
-- Updated `GET /subscription/:subscriptionId` endpoint
-- Removed interval from response objects
-- Cleaner API responses
-- Added UPI error handling in subscription updates
-
-### 5. Utility Function Removal
-
-- Removed `getIntervalFromRazorpayPlanId()`
-- Removed `getSubscriptionInterval()`
-- Removed `getPlanByInterval()`
-- Simplified utility functions
-
-### 6. Documentation Updates
-
-- Removed all interval-related documentation
-- Updated README.md to reflect simplified structure
-- Added UPI payment mode limitation documentation
-- Cleaner, more focused documentation
-
-### 7. UPI Payment Mode Error Handling
-
-- Added `UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED` error code
-- Implemented pre-update payment mode validation
-- Added comprehensive error handling for UPI-related errors
-- Added user-friendly error messages
-
-### 8. Database Compatibility Fix
-
-- Added `interval` column back to schema for database compatibility
-- Marked `interval` field as deprecated in TypeScript interface
-- Fixed database query errors caused by missing column
-- Maintained backward compatibility with existing databases
+- Added try-catch block around payment mode validation
+- Proper error propagation for UPI-related errors
+- Generic error handling for Razorpay API failures
+- Detailed logging for debugging payment mode issues
 
 ## Current State
 
-The plugin now works with a simplified approach and includes payment mode safety:
+The plugin now includes complete UPI payment mode protection:
 
-- ✅ **Plan Selection**: Uses `annual` boolean parameter
-- ✅ **No Interval Storage**: Subscriptions don't store interval
-- ✅ **Clean API**: Simpler response objects
-- ✅ **Simplified Schema**: Fewer database fields
-- ✅ **Better Performance**: Smaller data footprint
-- ✅ **UPI Protection**: Prevents updates to UPI-based subscriptions
-- ✅ **Error Safety**: Comprehensive error handling for payment modes
+- ✅ **UPI Error Code**: `UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED` defined
+- ✅ **Pre-Update Validation**: Checks payment mode before subscription updates
+- ✅ **Error Safety**: Prevents UPI subscription update errors
+- ✅ **User-Friendly Messages**: Clear error messages for UPI limitations
+- ✅ **Comprehensive Logging**: Detailed error logging for debugging
 
 ## How It Works Now
 
 ```typescript
-// Monthly subscription
-{ plan: "Starter", annual: false }
-
-// Annual subscription
-{ plan: "Starter", annual: true }
-
 // UPI subscription update (will fail)
-// Error: "Subscriptions cannot be updated when payment mode is UPI"
+try {
+  const response = await fetch(
+    "/api/auth/razorpay/subscription/create-or-update",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        plan: "Premium",
+        subscriptionId: "existing_subscription_id",
+      }),
+    }
+  );
+} catch (error) {
+  // Error: "Subscriptions cannot be updated when payment mode is UPI"
+}
 ```
+
+## Implementation Details
+
+The UPI validation happens in the subscription update flow:
+
+1. **Fetch Current Subscription**: Gets the current subscription from Razorpay
+2. **Check Payment Method**: Validates if `payment_method === "upi"`
+3. **Throw Error**: If UPI, throws `UPI_SUBSCRIPTION_UPDATE_NOT_ALLOWED`
+4. **Proceed with Update**: If not UPI, continues with normal update flow
 
 ## Benefits
 
-- ✅ **Simplified Data Model**: No redundant storage
-- ✅ **Cleaner Code**: Less complexity
-- ✅ **Better Performance**: Smaller records
-- ✅ **Easier Maintenance**: Fewer fields to manage
-- ✅ **Payment Mode Safety**: Prevents UPI update errors
-- ✅ **User-Friendly Errors**: Clear error messages
+- ✅ **Payment Mode Safety**: Prevents UPI subscription update errors
+- ✅ **User-Friendly Errors**: Clear error messages for UPI limitations
+- ✅ **Comprehensive Logging**: Detailed error logging for debugging
+- ✅ **API Safety**: Prevents failed API calls to Razorpay
+- ✅ **Better UX**: Users get immediate feedback about UPI limitations
 
 ## Status
 
-- ✅ Interval removal completed
-- ✅ UPI error handling implemented
-- ✅ All code updated
-- ✅ Documentation updated
+- ✅ UPI error code added
+- ✅ Payment mode validation implemented
+- ✅ Error handling completed
 - ✅ Ready for testing
+
+## Next Steps
+
+- Test UPI payment mode error scenarios
+- Verify error messages are user-friendly
+- Test with different payment methods
+- Consider adding similar validation for other payment modes if needed

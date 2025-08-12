@@ -5,10 +5,10 @@ import { extractRazorpayErrorMessage, getPlanByRazorpayId } from "./utils";
 /**
  * Handles the 'subscription.activated' webhook from Razorpay.
  */
-export async function onSubscriptionActivated(
+export async function onCheckoutSessionCompleted(
   ctx: GenericEndpointContext,
   options: RazorpayOptions,
-  event: any
+  event: any // Razorpay webhook event
 ) {
   try {
     if (!options.subscription?.enabled) return;
@@ -26,6 +26,7 @@ export async function onSubscriptionActivated(
       return;
     }
 
+    // Find the local subscription using the Razorpay subscription ID
     let dbSubscription = await ctx.context.adapter.findOne<Subscription>({
       model: "subscription",
       where: [
@@ -35,7 +36,7 @@ export async function onSubscriptionActivated(
 
     if (!dbSubscription) {
       logger.error(
-        `Razorpay webhook: Could not find a matching DB subscription for ID: ${razorpaySubscription.id}`
+        `Razorpay webhook: Could not find a matching DB subscription for Razorpay ID: ${razorpaySubscription.id}`
       );
       return;
     }
@@ -48,6 +49,7 @@ export async function onSubscriptionActivated(
           }
         : {};
 
+    // Update the local subscription with details from the Razorpay webhook
     await ctx.context.adapter.update<InputSubscription>({
       model: "subscription",
       where: [{ field: "id", value: dbSubscription.id }],
@@ -60,9 +62,14 @@ export async function onSubscriptionActivated(
           ? new Date(razorpaySubscription.current_end * 1000)
           : undefined,
         ...trial,
+        // Ensure plan name is updated if it changed during activation (e.g., trial to paid)
+        plan: plan.name.toLowerCase(),
+        seats: razorpaySubscription.quantity,
+        razorpaySubscriptionId: razorpaySubscription.id,
       },
     });
 
+    // Re-fetch the updated subscription to pass to hooks
     const updatedSubscription = await ctx.context.adapter.findOne<Subscription>(
       {
         model: "subscription",
@@ -77,20 +84,22 @@ export async function onSubscriptionActivated(
       return;
     }
 
+    // Call onTrialStart hook if applicable
     if (trial.trialStart && plan.freeTrial?.onTrialStart) {
-      await plan.freeTrial.onTrialStart(updatedSubscription);
+      await plan.freeTrial.onTrialStart(updatedSubscription); // Removed ctx
     }
 
-    await options.subscription?.onSubscriptionActivated?.({
+    // Call onSubscriptionComplete hook (equivalent to Stripe's)
+    await options.subscription?.onSubscriptionComplete?.({
       event,
       subscription: updatedSubscription,
       razorpaySubscription,
       plan,
-    });
+    }); // Removed ctx
   } catch (e: any) {
     const errorMessage = extractRazorpayErrorMessage(e);
     logger.error(
-      `Razorpay webhook 'subscription.activated' failed. Error: ${errorMessage}`
+      `Razorpay webhook 'checkout.session.completed' failed. Error: ${errorMessage}`
     );
   }
 }

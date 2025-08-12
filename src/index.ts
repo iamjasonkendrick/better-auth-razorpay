@@ -13,7 +13,7 @@ import { z } from "zod";
 // For now, assuming Razorpay's default behavior is sufficient.
 
 import {
-  onSubscriptionActivated,
+  onCheckoutSessionCompleted,
   onSubscriptionCancelled,
   onSubscriptionUpdated,
 } from "./hooks";
@@ -80,6 +80,7 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
       | "list-subscription"
       | "cancel-subscription"
       | "restore-subscription"
+      | "billing-portal"
   ) =>
     createAuthMiddleware(async (ctx) => {
       const session = ctx.context.session;
@@ -118,8 +119,8 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
      * Creates a new subscription or updates an existing one (upgrade/downgrade).
      * This is the Razorpay equivalent of Stripe's `upgradeSubscription` endpoint.
      */
-    createOrUpdateSubscription: createAuthEndpoint(
-      "/subscription/create-or-update",
+    upgradeSubscription: createAuthEndpoint(
+      "/subscription/upgrade",
       {
         method: "POST",
         body: z.object({
@@ -593,10 +594,10 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
             ); // Use the plan_id from fetched Razorpay sub
             if (plan) {
               const isTrialing =
-                !!fetchedRzpSub.start_at && // Changed to start_at
-                fetchedRzpSub.start_at * 1000 < Date.now() && // Changed to start_at
-                !!fetchedRzpSub.end_at && // Changed to end_at
-                fetchedRzpSub.end_at * 1000 > Date.now(); // Changed to end_at
+                !!fetchedRzpSub.start_at &&
+                fetchedRzpSub.start_at * 1000 < Date.now() &&
+                !!fetchedRzpSub.end_at &&
+                fetchedRzpSub.end_at * 1000 > Date.now();
               const statusToUpdate = isTrialing
                 ? "trialing"
                 : fetchedRzpSub.status;
@@ -605,15 +606,15 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
                 model: "subscription",
                 update: {
                   status: statusToUpdate,
-                  periodStart: new Date(fetchedRzpSub.current_start! * 1000), // Added non-null assertion
+                  periodStart: new Date(fetchedRzpSub.current_start! * 1000),
                   periodEnd: fetchedRzpSub.current_end
                     ? new Date(fetchedRzpSub.current_end * 1000)
                     : undefined,
-                  trialStart: fetchedRzpSub.start_at // Changed to start_at
-                    ? new Date(fetchedRzpSub.start_at * 1000) // Changed to start_at
+                  trialStart: fetchedRzpSub.start_at
+                    ? new Date(fetchedRzpSub.start_at * 1000)
                     : undefined,
-                  trialEnd: fetchedRzpSub.end_at // Changed to end_at
-                    ? new Date(fetchedRzpSub.end_at * 1000) // Changed to end_at
+                  trialEnd: fetchedRzpSub.end_at
+                    ? new Date(fetchedRzpSub.end_at * 1000)
                     : undefined,
                   updatedAt: new Date(),
                 },
@@ -622,6 +623,14 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
               logger.info(
                 `Razorpay success callback: Updated local subscription ${dbSubscription.id} to status ${statusToUpdate}.`
               );
+
+              // Call subscription complete hook
+              await options.subscription?.onSubscriptionComplete?.({
+                event: null,
+                subscription: dbSubscription,
+                razorpaySubscription: fetchedRzpSub,
+                plan: plan,
+              });
             } else {
               logger.warn(
                 `Razorpay success callback: Plan not found in config for Razorpay plan_id ${fetchedRzpSub.plan_id}`
@@ -639,12 +648,77 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
     ),
   };
 
+  // SECTION 6: BILLING PORTAL ENDPOINT (Stripe-like functionality)
+  // =================================================================
+
+  const billingPortalEndpoint = {
+    createBillingPortal: createAuthEndpoint(
+      "/subscription/billing-portal",
+      {
+        method: "POST",
+        body: z.object({
+          referenceId: z.string().optional(),
+          returnUrl: z.string().default("/"),
+        }),
+        use: [
+          sessionMiddleware,
+          originCheck((ctx) => ctx.body.returnUrl),
+          referenceMiddleware("billing-portal"),
+        ],
+      },
+      async (ctx) => {
+        const { user } = ctx.context.session;
+        const referenceId = ctx.body.referenceId || user.id;
+
+        let customerId = user.razorpayCustomerId;
+
+        // Try to find customer ID from active subscriptions if not on user
+        if (!customerId) {
+          const subscription = await ctx.context.adapter
+            .findMany<Subscription>({
+              model: "subscription",
+              where: [{ field: "referenceId", value: referenceId }],
+            })
+            .then((subs) =>
+              subs.find(
+                (sub) => sub.status === "active" || sub.status === "trialing"
+              )
+            );
+
+          customerId = subscription?.razorpayCustomerId;
+        }
+
+        if (!customerId) {
+          throw new APIError("BAD_REQUEST", {
+            message: "No Razorpay customer found for this user",
+          });
+        }
+
+        try {
+          // Generate Razorpay customer dashboard URL
+          const dashboardUrl = `https://dashboard.razorpay.com/app/customers/${customerId}/activity`;
+          return ctx.json({
+            url: dashboardUrl,
+            redirect: true,
+          });
+        } catch (error: any) {
+          const errorMessage = extractRazorpayErrorMessage(error);
+          logger.error("Error creating billing portal session", errorMessage);
+          throw new APIError("BAD_REQUEST", {
+            message: errorMessage,
+          });
+        }
+      }
+    ),
+  };
+
   // SECTION 5: FINAL PLUGIN ASSEMBLY
   // =================================================================
 
   return {
     id: "razorpay", // Unique identifier for the plugin
     endpoints: {
+      ...billingPortalEndpoint,
       razorpayWebhook: createAuthEndpoint(
         "/razorpay/webhook",
         {
@@ -699,20 +773,18 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
           try {
             switch (event.event) {
               case "subscription.activated":
-                await onSubscriptionActivated(ctx, options, event);
+                await onCheckoutSessionCompleted(ctx, options, event);
                 break;
               case "subscription.updated":
               case "subscription.halted":
               case "subscription.resumed":
               case "subscription.expired":
-                // Handle all status update events with the same handler
                 await onSubscriptionUpdated(ctx, options, event);
                 break;
               case "subscription.cancelled":
                 await onSubscriptionCancelled(ctx, options, event);
                 break;
               default:
-                // Log unhandled events but still process through onEvent
                 logger.info(
                   `Received unhandled Razorpay event: ${event.event}`
                 );
@@ -749,23 +821,12 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
                   // hookCtx is BetterAuthHookContext
                   if (hookCtx && options.createCustomerOnSignUp) {
                     try {
-                      // Get custom parameters for customer creation
-                      const customerParams =
-                        await options.getCustomerCreateParams?.(
-                          {
-                            user,
-                          },
-                          hookCtx.context.request
-                        );
-
                       const rzpCustomer = await client.customers.create({
                         email: user.email,
                         name: user.name,
-                        fail_existing: 0, // Does not throw error if customer exists
-                        ...customerParams?.params,
+                        fail_existing: 0,
                         notes: {
                           userId: user.id,
-                          ...customerParams?.params?.notes,
                         },
                       });
                       const updatedUser = await hookCtx.context.adapter.update({

@@ -98,13 +98,16 @@ export interface RazorpayOptions {
     enabled: boolean;
     plans: RazorpayPlan[] | (() => Promise<RazorpayPlan[]>);
     requireEmailVerification?: boolean;
-    onSubscriptionCreated?: (data: {
-      razorpaySubscription: Subscriptions.RazorpaySubscription;
+    /**
+     * Callback when a subscription is successfully activated (after payment)
+     */
+    onSubscriptionComplete?: (data: {
+      event: any;
       subscription: Subscription;
+      razorpaySubscription: any;
       plan: RazorpayPlan;
     }) => Promise<void>;
-    onSubscriptionActivated?: (data: {
-      event: any;
+    onSubscriptionCreated?: (data: {
       razorpaySubscription: Subscriptions.RazorpaySubscription;
       subscription: Subscription;
       plan: RazorpayPlan;
@@ -133,7 +136,8 @@ export interface RazorpayOptions {
           | "create-subscription"
           | "list-subscription"
           | "cancel-subscription"
-          | "restore-subscription";
+          | "restore-subscription"
+          | "billing-portal";
       },
       request?: Request
     ) => Promise<boolean>;

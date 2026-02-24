@@ -1,4 +1,4 @@
-# @better-auth/razorpay
+# better-auth-razorpay(Community Plugin)
 
 A comprehensive [Razorpay](https://razorpay.com) plugin for [Better Auth](https://better-auth.com) — subscriptions, customers, plans, webhooks, and organization billing out of the box.
 

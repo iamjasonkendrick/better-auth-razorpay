@@ -19,7 +19,7 @@ A comprehensive [Razorpay](https://razorpay.com) plugin for [Better Auth](https:
 ## Installation
 
 ```bash
-npm install @better-auth/razorpay razorpay
+npm install better-auth-razorpay razorpay
 ```
 
 ## Quick Start
@@ -28,7 +28,7 @@ npm install @better-auth/razorpay razorpay
 
 ```ts
 import { betterAuth } from "better-auth";
-import { razorpay } from "@better-auth/razorpay";
+import { razorpay } from "better-auth-razorpay";
 import Razorpay from "razorpay";
 
 const razorpayClient = new Razorpay({
@@ -73,7 +73,7 @@ export const auth = betterAuth({
 
 ```ts
 import { createAuthClient } from "better-auth/client";
-import { razorpayClient } from "@better-auth/razorpay/client";
+import { razorpayClient } from "better-auth-razorpay/client";
 
 export const client = createAuthClient({
   plugins: [
@@ -416,7 +416,7 @@ import {
   hasPaymentIssue,
   toSubscriptionStatus,
   timestampToDate,
-} from "@better-auth/razorpay";
+} from "better-auth-razorpay";
 ```
 
 | Function                    | Description                                              |
@@ -438,7 +438,7 @@ import {
 All error codes are exported and can be used for client-side matching:
 
 ```ts
-import { RAZORPAY_ERROR_CODES } from "@better-auth/razorpay/client";
+import { RAZORPAY_ERROR_CODES } from "better-auth-razorpay/client";
 ```
 
 | Code                                   | Message                                        |

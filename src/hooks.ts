@@ -3,15 +3,15 @@ import type { User } from "@better-auth/core/db";
 import type { Organization } from "better-auth/plugins/organization";
 import { subscriptionNotes } from "./metadata";
 import type {
-  CustomerType,
-  RazorpayOptions,
-  RazorpayWebhookEvent,
-  Subscription,
+    CustomerType,
+    RazorpayOptions,
+    RazorpayWebhookEvent,
+    Subscription,
 } from "./types";
 import {
-  getPlanByPlanId,
-  timestampToDate,
-  toSubscriptionStatus,
+    getPlanByPlanId,
+    timestampToDate,
+    toSubscriptionStatus,
 } from "./utils";
 
 /**
@@ -221,6 +221,21 @@ export async function onSubscriptionActivated(
         subscription: subscription as Subscription,
         plan,
       });
+
+      // If subscription had a trial, set trialEnd and call onTrialEnd
+      if (
+        subscription &&
+        (subscription as Subscription).trialStart &&
+        plan.freeTrial
+      ) {
+        await ctx.context.adapter.update({
+          model: "subscription",
+          update: { trialEnd: new Date() },
+          where: [{ field: "id", value: (subscription as Subscription).id }],
+        });
+        await plan.freeTrial.onTrialEnd?.
+          ({ subscription: subscription as Subscription }, ctx);
+      }
     }
   } catch (error: any) {
     ctx.context.logger.error(
@@ -256,6 +271,9 @@ export async function onSubscriptionCharged(
       return;
     }
 
+    const now = new Date();
+    const isRenewal = razorpaySub.paid_count > 1;
+
     const updatedSubscription = await ctx.context.adapter.update<Subscription>({
       model: "subscription",
       update: {
@@ -264,7 +282,8 @@ export async function onSubscriptionCharged(
         currentEnd: timestampToDate(razorpaySub.current_end),
         paidCount: razorpaySub.paid_count,
         remainingCount: razorpaySub.remaining_count,
-        updatedAt: new Date(),
+        ...(isRenewal ? { renewedAt: now } : {}),
+        updatedAt: now,
       },
       where: [{ field: "id", value: subscription.id }],
     });
@@ -274,6 +293,15 @@ export async function onSubscriptionCharged(
       razorpaySubscription: razorpaySub,
       subscription: (updatedSubscription || subscription) as Subscription,
     });
+
+    // Call onSubscriptionRenewed for recurring payments (not the first charge)
+    if (isRenewal) {
+      await options.subscription.onSubscriptionRenewed?.({
+        event,
+        razorpaySubscription: razorpaySub,
+        subscription: (updatedSubscription || subscription) as Subscription,
+      });
+    }
   } catch (error: any) {
     ctx.context.logger.error(
       `Razorpay webhook (subscription.charged) failed: ${error.message}`,

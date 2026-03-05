@@ -6,13 +6,15 @@ A comprehensive [Razorpay](https://razorpay.com) plugin for [Better Auth](https:
 
 ## Features
 
-- 🔄 **Subscription lifecycle** — create, upgrade, cancel, pause, resume, update
-- 👤 **Customer sync** — auto-create Razorpay customers on sign-up, keep email/name in sync
-- 🏢 **Organization billing** — per-org subscriptions with seat-based quantity sync
-- 🔔 **Webhook handling** — HMAC-SHA256 verified webhook processing for all subscription events
-- 📋 **Plan management** — create, list, and fetch Razorpay plans via API
-- 🧾 **Invoices & offers** — fetch invoices, link/unlink offers to subscriptions
-- 🔒 **Type-safe** — full TypeScript support with typed error codes and status helpers
+- 🔄 **Full Subscription Lifecycle** — Create, upgrade, cancel (immediate or end-of-cycle), pause, resume, restore, and query subscriptions with a single API
+- 🛡️ **Trial Abuse Prevention** — Automatically tracks trial history per user and blocks repeat free trials across plan changes
+- 👤 **Automatic Customer Sync** — Razorpay customers are created on sign-up and kept in sync whenever user details change
+- 🏢 **Organization & Seat-Based Billing** — Per-organization subscriptions with automatic seat quantity sync as members join or leave
+- 🔔 **Secure Webhook Processing** — HMAC-SHA256 verified handlers for every Razorpay subscription event with granular lifecycle callbacks
+- 📋 **Plan & Invoice Management** — Create, list, and fetch plans; retrieve invoices; link and manage promotional offers
+- ⚛️ **Pre-Built React Hooks** — Drop-in TanStack Query hooks with automatic cache invalidation for instant UI integration
+- 🧩 **Line Items & Scheduling** — Usage-based add-ons via line items and deferred plan changes with `scheduleAtPeriodEnd`
+- 🔒 **End-to-End Type Safety** — Full TypeScript coverage with typed error codes, status helpers, and IntelliSense-friendly APIs
 
 ---
 
@@ -139,6 +141,7 @@ subscription: {
 
   // Lifecycle callbacks
   onSubscriptionActivated: async ({ event, razorpaySubscription, subscription, plan }) => {},
+  onSubscriptionRenewed: async ({ event, razorpaySubscription, subscription }) => {},
   onSubscriptionAuthenticated: async ({ event, razorpaySubscription, subscription }) => {},
   onSubscriptionCharged: async ({ event, razorpaySubscription, subscription }) => {},
   onSubscriptionCancelled: async ({ event, razorpaySubscription, subscription }) => {},
@@ -186,6 +189,8 @@ type RazorpayPlan = {
 | `POST` | `/subscription/resume`  | Resume a paused subscription          |
 | `GET`  | `/subscription/list`    | List subscriptions for user/reference |
 | `POST` | `/subscription/update`  | Update subscription (plan, quantity)  |
+| `POST` | `/subscription/restore` | Restore pending-cancellation sub      |
+| `GET`  | `/subscription/get`     | Get a subscription by local DB ID     |
 
 ### Razorpay-Specific Endpoints
 
@@ -239,6 +244,20 @@ const { data } = await client.subscription.upgrade({
   plan: "pro",
   annual: true,
 });
+
+// With add-on line items (usage-based billing)
+const { data } = await client.subscription.upgrade({
+  plan: "pro",
+  lineItems: [
+    { item_id: "item_XXXXXXX", quantity: 5 },
+  ],
+});
+
+// Schedule plan change at end of billing period (avoid mid-cycle proration)
+const { data } = await client.subscription.upgrade({
+  plan: "enterprise",
+  scheduleAtPeriodEnd: true,
+});
 ```
 
 ### Cancel Subscription
@@ -260,10 +279,16 @@ await client.subscription.pause({});
 await client.subscription.resume({});
 ```
 
-### List Subscriptions
+### List & Get Subscriptions
 
 ```ts
-const { data } = await client.subscription.list({});
+// List all subscriptions
+const { data: subscriptions } = await client.subscription.list({});
+
+// Get specific subscription by its local DB ID
+const { data: sub } = await client.subscription.get({
+  query: { subscriptionId: "local_sub_id" }
+});
 ```
 
 ### Organization Subscription
@@ -275,6 +300,30 @@ const { data } = await client.subscription.upgrade({
   referenceId: "org_123",
   customerType: "organization",
 });
+```
+
+### React Hooks (TanStack Query)
+
+The plugin exports a full suite of TanStack query/mutation hooks under `better-auth-razorpay/react`. Simply install `@tanstack/react-query` and import them:
+
+```tsx
+import { 
+  useSubscription, 
+  useSubscriptionList, 
+  useUpgradeSubscription, 
+  useSubscriptionStatus 
+} from "better-auth-razorpay/react";
+
+function Billing() {
+  const { data: subscriptions, isLoading } = useSubscriptionList(authClient);
+  const { mutate: upgrade } = useUpgradeSubscription(authClient);
+  
+  const status = useSubscriptionStatus(subscriptions?.[0]);
+
+  if (status.isTrialing) return <p>You are on a free trial!</p>;
+  
+  return <button onClick={() => upgrade({ plan: "pro" })}>Upgrade</button>
+}
 ```
 
 ---
@@ -358,6 +407,10 @@ The plugin automatically extends your database with the following tables/fields:
 | `shortUrl`               | `string?`  | Payment authorization URL                  |
 | `cancelAtCycleEnd`       | `boolean?` | Scheduled cancellation flag                |
 | `billingPeriod`          | `string?`  | Billing period                             |
+| `trialStart`             | `date?`    | Trial period start date                    |
+| `trialEnd`               | `date?`    | Trial period end date                      |
+| `metadata`               | `string?`  | Custom JSON stringified metadata           |
+| `renewedAt`              | `date?`    | Last renewal timestamp                     |
 
 ### `organization` table (extended, when enabled)
 
@@ -552,6 +605,8 @@ plans: [
 ```
 
 The plugin sets Razorpay's `start_at` parameter to defer the first charge by the configured number of trial days.
+
+**Trial Abuse Prevention:** The plugin automatically tracks `trialStart` in the local database. If a user has *ever* had a trial on any subscription, they are permanently blocked from receiving another free trial if they upgrade or resubscribe. They will be charged immediately.
 
 ---
 

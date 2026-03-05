@@ -44,6 +44,10 @@ describe("RAZORPAY_ERROR_CODES", () => {
       "CUSTOMER_EDIT_FAILED",
       "PENDING_UPDATE_NOT_FOUND",
       "PENDING_UPDATE_CANCEL_FAILED",
+      "SUBSCRIPTION_RESTORE_FAILED",
+      "SUBSCRIPTION_NOT_PENDING_CANCEL",
+      "TRIAL_ALREADY_USED",
+      "SUBSCRIPTION_RENEW_FAILED",
     ];
 
     for (const key of expectedKeys) {
@@ -51,8 +55,8 @@ describe("RAZORPAY_ERROR_CODES", () => {
     }
   });
 
-  it("has 36 error codes", () => {
-    expect(Object.keys(RAZORPAY_ERROR_CODES).length).toBe(36);
+  it("has 40 error codes", () => {
+    expect(Object.keys(RAZORPAY_ERROR_CODES).length).toBe(40);
   });
 
   it("all error codes are non-empty strings", () => {

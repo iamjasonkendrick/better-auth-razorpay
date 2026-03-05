@@ -80,6 +80,22 @@ export const subscriptions = {
         type: "string",
         required: false,
       },
+      trialStart: {
+        type: "date",
+        required: false,
+      },
+      trialEnd: {
+        type: "date",
+        required: false,
+      },
+      metadata: {
+        type: "string",
+        required: false,
+      },
+      renewedAt: {
+        type: "date",
+        required: false,
+      },
     },
   },
 } satisfies BetterAuthPluginDBSchema;

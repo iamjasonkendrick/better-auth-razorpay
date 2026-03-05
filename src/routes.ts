@@ -33,11 +33,19 @@ import {
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
 
+const lineItemSchema = z.object({
+  item_id: z.string(),
+  quantity: z.number().optional(),
+});
+
 const upgradeSubscriptionBodySchema = z.object({
   plan: z.string(),
   referenceId: z.string().optional(),
   customerType: z.enum(["user", "organization"]).optional(),
   annual: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  lineItems: z.array(lineItemSchema).optional(),
+  scheduleAtPeriodEnd: z.boolean().optional(),
 });
 
 const cancelSubscriptionBodySchema = z.object({
@@ -70,6 +78,18 @@ const updateSubscriptionBodySchema = z.object({
   quantity: z.number().optional(),
   remainingCount: z.number().optional(),
   scheduleChangeAt: z.enum(["now", "cycle_end"]).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+const restoreSubscriptionBodySchema = z.object({
+  referenceId: z.string().optional(),
+  customerType: z.enum(["user", "organization"]).optional(),
+});
+
+const getSubscriptionQuerySchema = z.object({
+  subscriptionId: z.string(),
+  referenceId: z.string().optional(),
+  customerType: z.enum(["user", "organization"]).optional(),
 });
 
 const fetchSubscriptionQuerySchema = z.object({
@@ -259,6 +279,20 @@ export const upgradeSubscription = (options: RazorpayOptions) => {
         annual && plan.annualPlanId ? plan.annualPlanId : plan.planId;
 
       // Create subscription record in DB first
+      const now = new Date();
+      const hasTrialAndEligible =
+        plan.freeTrial?.days &&
+        !(await ctx.context.adapter.findMany<Subscription>({
+          model: "subscription",
+          where: [{ field: "referenceId", value: referenceId }],
+        })).some((s) => s.trialStart !== undefined && s.trialStart !== null);
+
+      const trialEndDate = hasTrialAndEligible
+        ? new Date(
+            now.getTime() + plan.freeTrial!.days * 24 * 60 * 60 * 1000,
+          )
+        : undefined;
+
       const dbSubscription = await ctx.context.adapter.create<Subscription>({
         model: "subscription",
         data: {
@@ -270,6 +304,13 @@ export const upgradeSubscription = (options: RazorpayOptions) => {
           quantity: plan.quantity || 1,
           totalCount: plan.totalCount || 0,
           ...(plan.group ? { groupId: plan.group } : {}),
+          ...(hasTrialAndEligible
+            ? { trialStart: now, trialEnd: trialEndDate }
+            : {}),
+          ...(ctx.body.metadata
+            ? { metadata: JSON.stringify(ctx.body.metadata) }
+            : {}),
+          billingPeriod: annual ? "yearly" : "monthly",
         },
       });
 
@@ -288,13 +329,26 @@ export const upgradeSubscription = (options: RazorpayOptions) => {
         }),
       };
 
-      // Add free trial offset
-      if (plan.freeTrial?.days) {
-        const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + plan.freeTrial.days);
+      // Add free trial offset (skip if user already had a trial)
+      if (plan.freeTrial?.days && hasTrialAndEligible) {
         subscriptionCreateParams.start_at = Math.floor(
-          trialEnd.getTime() / 1000,
+          trialEndDate!.getTime() / 1000,
         );
+      }
+
+      // Add line items as Razorpay add-ons
+      if (ctx.body.lineItems && ctx.body.lineItems.length > 0) {
+        subscriptionCreateParams.addons = ctx.body.lineItems.map(
+          (item: { item_id: string; quantity?: number }) => ({
+            item: { id: item.item_id },
+            ...(item.quantity ? { quantity: item.quantity } : {}),
+          }),
+        );
+      }
+
+      // Schedule plan change at end of billing period (for existing sub upgrades)
+      if (ctx.body.scheduleAtPeriodEnd) {
+        subscriptionCreateParams.schedule_change_at = "cycle_end";
       }
 
       // Allow user customization
@@ -775,6 +829,9 @@ export const updateSubscription = (options: RazorpayOptions) => {
             ...(ctx.body.quantity !== undefined
               ? { quantity: ctx.body.quantity }
               : {}),
+            ...(ctx.body.metadata
+              ? { metadata: JSON.stringify(ctx.body.metadata) }
+              : {}),
             updatedAt: new Date(),
           },
           where: [{ field: "id", value: subscription.id }],
@@ -793,6 +850,145 @@ export const updateSubscription = (options: RazorpayOptions) => {
           RAZORPAY_ERROR_CODES.SUBSCRIPTION_UPDATE_FAILED,
         );
       }
+    },
+  );
+};
+
+/**
+ * POST /subscription/restore
+ *
+ * Restore a subscription that was scheduled for cancellation at cycle end.
+ */
+export const restoreSubscription = (options: RazorpayOptions) => {
+  if (!options.subscription?.enabled) {
+    throw new Error("Subscriptions must be enabled");
+  }
+  const subscriptionOptions = options.subscription;
+  return createAuthEndpoint(
+    "/subscription/restore",
+    {
+      method: "POST",
+      body: restoreSubscriptionBodySchema,
+      metadata: {
+        openapi: {
+          summary: "Restore subscription",
+          description:
+            "Restore a subscription that was scheduled for cancellation at cycle end",
+          responses: { 200: { description: "Subscription restored" } },
+        },
+      },
+      use: [
+        razorpaySessionMiddleware,
+        referenceMiddleware(subscriptionOptions, "restore-subscription"),
+      ],
+    },
+    async (ctx) => {
+      const session = ctx.context.session;
+      const user = session.user as typeof session.user & WithRazorpayCustomerId;
+      const customerType = ctx.body.customerType || "user";
+      const referenceId =
+        ctx.body.referenceId ||
+        (customerType === "organization"
+          ? session.session.activeOrganizationId
+          : user.id);
+
+      if (!referenceId) {
+        throw createAPIError(
+          "BAD_REQUEST",
+          RAZORPAY_ERROR_CODES.ORGANIZATION_REFERENCE_ID_REQUIRED,
+        );
+      }
+
+      const subscription = await ctx.context.adapter.findOne<Subscription>({
+        model: "subscription",
+        where: [{ field: "referenceId", value: referenceId }],
+      });
+
+      if (!subscription?.razorpaySubscriptionId) {
+        throw createAPIError(
+          "NOT_FOUND",
+          RAZORPAY_ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
+        );
+      }
+
+      // Must be pending cancellation (cancelAtCycleEnd = true, still active)
+      if (!subscription.cancelAtCycleEnd) {
+        throw createAPIError(
+          "BAD_REQUEST",
+          RAZORPAY_ERROR_CODES.SUBSCRIPTION_NOT_PENDING_CANCEL,
+        );
+      }
+
+      try {
+        // Razorpay doesn't have a "restore" API — when cancelAtCycleEnd is used,
+        // the subscription is still active on Razorpay until cycle end.
+        // We clear the local pending cancellation flags.
+        // If you need to re-activate on Razorpay side, you'd create a new subscription.
+        const updated = await ctx.context.adapter.update<Subscription>({
+          model: "subscription",
+          update: {
+            cancelAtCycleEnd: false,
+            cancelledAt: null,
+            updatedAt: new Date(),
+          },
+          where: [{ field: "id", value: subscription.id }],
+        });
+
+        return ctx.json({ subscription: updated || subscription });
+      } catch (error: any) {
+        ctx.context.logger.error(
+          `Failed to restore subscription: ${error.message}`,
+        );
+        throw createAPIError(
+          "INTERNAL_SERVER_ERROR",
+          RAZORPAY_ERROR_CODES.SUBSCRIPTION_RESTORE_FAILED,
+        );
+      }
+    },
+  );
+};
+
+/**
+ * GET /subscription/get
+ *
+ * Fetch a single subscription by its local database ID.
+ */
+export const getSubscription = (options: RazorpayOptions) => {
+  if (!options.subscription?.enabled) {
+    throw new Error("Subscriptions must be enabled");
+  }
+  const subscriptionOptions = options.subscription;
+  return createAuthEndpoint(
+    "/subscription/get",
+    {
+      method: "GET",
+      query: getSubscriptionQuerySchema,
+      metadata: {
+        openapi: {
+          summary: "Get subscription",
+          description: "Fetch a subscription by its local database ID",
+          responses: { 200: { description: "Subscription details" } },
+        },
+      },
+      use: [
+        razorpaySessionMiddleware,
+        referenceMiddleware(subscriptionOptions, "get-subscription"),
+      ],
+    },
+    async (ctx) => {
+      const subscription = await ctx.context.adapter.findOne<Subscription>({
+        model: "subscription",
+        where: [{ field: "id", value: ctx.query.subscriptionId }],
+      });
+
+      if (!subscription) {
+        throw createAPIError(
+          "NOT_FOUND",
+          RAZORPAY_ERROR_CODES.SUBSCRIPTION_NOT_FOUND,
+        );
+      }
+
+      return ctx.json(subscription);
     },
   );
 };

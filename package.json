@@ -1,7 +1,7 @@
 {
   "name": "better-auth-razorpay",
   "author": "",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -40,6 +40,11 @@
       "dev-source": "./src/client.ts",
       "types": "./dist/client.d.ts",
       "default": "./dist/client.js"
+    },
+    "./react": {
+      "dev-source": "./src/react.ts",
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
     }
   },
   "typesVersions": {
@@ -49,6 +54,9 @@
       ],
       "client": [
         "./dist/client.d.ts"
+      ],
+      "react": [
+        "./dist/react.d.ts"
       ]
     }
   },
@@ -58,10 +66,22 @@
   },
   "peerDependencies": {
     "better-auth": "*",
-    "razorpay": "^2.9.0"
+    "razorpay": "^2.9.0",
+    "@tanstack/react-query": "^5.0.0",
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@tanstack/react-query": "^5.80.7",
     "@types/node": "^25.2.3",
+    "@types/react": "^19.2.14",
     "better-auth": "^1.2.10",
     "better-call": "^1.0.10",
     "razorpay": "^2.9.6",

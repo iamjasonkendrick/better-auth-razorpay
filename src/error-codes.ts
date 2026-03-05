@@ -42,4 +42,10 @@ export const RAZORPAY_ERROR_CODES = defineErrorCodes({
   CUSTOMER_EDIT_FAILED: "Failed to edit customer details",
   PENDING_UPDATE_NOT_FOUND: "No pending update found for subscription",
   PENDING_UPDATE_CANCEL_FAILED: "Failed to cancel pending update",
+  SUBSCRIPTION_RESTORE_FAILED: "Failed to restore subscription",
+  SUBSCRIPTION_NOT_PENDING_CANCEL:
+    "Subscription is not pending cancellation, cannot restore",
+  TRIAL_ALREADY_USED:
+    "You have already used a free trial and are not eligible for another",
+  SUBSCRIPTION_RENEW_FAILED: "Failed to process subscription renewal",
 });

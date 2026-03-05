@@ -1,8 +1,8 @@
 import type {
-  GenericEndpointContext,
-  InferOptionSchema,
-  Session,
-  User,
+    GenericEndpointContext,
+    InferOptionSchema,
+    Session,
+    User,
 } from "better-auth";
 import type { Organization } from "better-auth/plugins/organization";
 import type Razorpay from "razorpay";
@@ -14,7 +14,9 @@ export type AuthorizeReferenceAction =
   | "cancel-subscription"
   | "pause-subscription"
   | "resume-subscription"
-  | "update-subscription";
+  | "update-subscription"
+  | "restore-subscription"
+  | "get-subscription";
 
 export type CustomerType = "user" | "organization";
 
@@ -112,6 +114,14 @@ export type RazorpayPlan = {
           },
           ctx: GenericEndpointContext,
         ) => Promise<void>;
+        /**
+         * A function that will be called when the trial expires
+         * without converting to a paid subscription.
+         */
+        onTrialExpired?: (
+          subscription: Subscription,
+          ctx: GenericEndpointContext,
+        ) => Promise<void>;
       }
     | undefined;
 };
@@ -204,6 +214,23 @@ export interface Subscription {
    * The billing period (daily, weekly, monthly, quarterly, yearly)
    */
   billingPeriod?: string | undefined;
+  /**
+   * When the free trial started
+   */
+  trialStart?: Date | undefined;
+  /**
+   * When the free trial ends (or ended)
+   */
+  trialEnd?: Date | undefined;
+  /**
+   * Custom metadata stored as JSON string.
+   * Use `JSON.parse()` to read and `JSON.stringify()` to write.
+   */
+  metadata?: string | undefined;
+  /**
+   * Last renewal date (set when a recurring charge succeeds after the first)
+   */
+  renewedAt?: Date | undefined;
 }
 
 /**
@@ -373,6 +400,17 @@ export type SubscriptionOptions = {
    * (plan change, quantity change)
    */
   onSubscriptionUpdated?:
+    | ((data: {
+        event: RazorpayWebhookEvent;
+        razorpaySubscription: RazorpaySubscriptionEntity;
+        subscription: Subscription;
+      }) => Promise<void>)
+    | undefined;
+  /**
+   * A callback to run when a subscription is renewed
+   * (recurring charge after the first payment)
+   */
+  onSubscriptionRenewed?:
     | ((data: {
         event: RazorpayWebhookEvent;
         razorpaySubscription: RazorpaySubscriptionEntity;

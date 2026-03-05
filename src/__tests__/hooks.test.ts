@@ -1,21 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  onSubscriptionActivated,
-  onSubscriptionAuthenticated,
-  onSubscriptionCancelled,
-  onSubscriptionCharged,
-  onSubscriptionCompleted,
-  onSubscriptionHalted,
-  onSubscriptionPaused,
-  onSubscriptionPending,
-  onSubscriptionResumed,
-  onSubscriptionUpdated,
+    onSubscriptionActivated,
+    onSubscriptionAuthenticated,
+    onSubscriptionCancelled,
+    onSubscriptionCharged,
+    onSubscriptionCompleted,
+    onSubscriptionHalted,
+    onSubscriptionPaused,
+    onSubscriptionPending,
+    onSubscriptionResumed,
+    onSubscriptionUpdated,
 } from "../hooks";
 import type {
-  RazorpayOptions,
-  RazorpaySubscriptionEntity,
-  RazorpayWebhookEvent,
-  Subscription,
+    RazorpayOptions,
+    RazorpaySubscriptionEntity,
+    RazorpayWebhookEvent,
+    Subscription,
 } from "../types";
 
 // ─── Mock Factories ──────────────────────────────────────────────────────────
@@ -258,6 +258,34 @@ describe("onSubscriptionActivated", () => {
 
     expect(adapter.create).toHaveBeenCalled();
   });
+
+  it("sets trialEnd and calls onTrialEnd if subscription had a trial", async () => {
+    const adapter = makeMockAdapter();
+    const ctx = makeMockCtx(adapter);
+    const dbSub = makeDbSubscription({ status: "authenticated", trialStart: new Date() });
+    adapter.findOne.mockResolvedValue(dbSub);
+    adapter.update.mockResolvedValue({ ...dbSub, status: "active", trialEnd: expect.any(Date) });
+
+    const rzpSub = makeRazorpaySub({ status: "active" });
+    const event = makeWebhookEvent("subscription.activated", rzpSub);
+    const onTrialEnd = vi.fn();
+    const options = makeOptions({
+      subscription: {
+        enabled: true,
+        plans: [{ planId: "plan_001", name: "Basic", freeTrial: { days: 7, onTrialEnd } }],
+      },
+    });
+
+    await onSubscriptionActivated(ctx, options, event);
+
+    expect(adapter.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "subscription",
+        update: expect.objectContaining({ trialEnd: expect.any(Date) }),
+      }),
+    );
+    expect(onTrialEnd).toHaveBeenCalled();
+  });
 });
 
 // ─── onSubscriptionCharged ───────────────────────────────────────────────────
@@ -292,6 +320,39 @@ describe("onSubscriptionCharged", () => {
       }),
     );
     expect(callback).toHaveBeenCalled();
+  });
+
+  it("tracks renewal and calls onSubscriptionRenewed for recurring payments", async () => {
+    const adapter = makeMockAdapter();
+    const ctx = makeMockCtx(adapter);
+    const dbSub = makeDbSubscription();
+    adapter.findOne.mockResolvedValue(dbSub);
+    adapter.update.mockResolvedValue({ ...dbSub, paidCount: 2 });
+
+    const rzpSub = makeRazorpaySub({ paid_count: 2, remaining_count: 10 });
+    const event = makeWebhookEvent("subscription.charged", rzpSub);
+    const chargedCallback = vi.fn();
+    const renewedCallback = vi.fn();
+    const options = makeOptions({
+      subscription: {
+        enabled: true,
+        plans: [{ planId: "plan_001", name: "Basic" }],
+        onSubscriptionCharged: chargedCallback,
+        onSubscriptionRenewed: renewedCallback,
+      },
+    });
+
+    await onSubscriptionCharged(ctx, options, event);
+
+    expect(adapter.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          renewedAt: expect.any(Date),
+        }),
+      }),
+    );
+    expect(chargedCallback).toHaveBeenCalled();
+    expect(renewedCallback).toHaveBeenCalled();
   });
 
   it("logs warning if subscription not found", async () => {

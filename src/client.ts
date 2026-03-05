@@ -31,6 +31,8 @@ export const razorpayClient = <
       "/subscription/pause": "POST",
       "/subscription/resume": "POST",
       "/subscription/update": "POST",
+      "/subscription/restore": "POST",
+      "/subscription/get": "GET",
       "/razorpay/subscription/get": "GET",
       "/razorpay/subscription-link": "POST",
       "/razorpay/subscription/pending-update": "GET",

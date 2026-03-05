@@ -4,33 +4,35 @@ import { APIError } from "better-call";
 import { RAZORPAY_ERROR_CODES } from "./error-codes";
 import { customerNotes } from "./metadata";
 import {
-  cancelPendingUpdate,
-  cancelSubscription,
-  createCustomer,
-  createPlan,
-  createSubscriptionLink,
-  deleteOffer,
-  editCustomer,
-  fetchCustomer,
-  fetchInvoices,
-  fetchPendingUpdate,
-  fetchPlan,
-  fetchSubscription,
-  linkOffer,
-  listCustomers,
-  listPlans,
-  listSubscriptions,
-  pauseSubscription,
-  razorpayWebhook,
-  resumeSubscription,
-  updateSubscription,
-  upgradeSubscription,
+    cancelPendingUpdate,
+    cancelSubscription,
+    createCustomer,
+    createPlan,
+    createSubscriptionLink,
+    deleteOffer,
+    editCustomer,
+    fetchCustomer,
+    fetchInvoices,
+    fetchPendingUpdate,
+    fetchPlan,
+    fetchSubscription,
+    getSubscription,
+    linkOffer,
+    listCustomers,
+    listPlans,
+    listSubscriptions,
+    pauseSubscription,
+    razorpayWebhook,
+    restoreSubscription,
+    resumeSubscription,
+    updateSubscription,
+    upgradeSubscription,
 } from "./routes";
 import { getSchema } from "./schema";
 import type {
-  RazorpayOptions,
-  Subscription,
-  WithRazorpayCustomerId,
+    RazorpayOptions,
+    Subscription,
+    WithRazorpayCustomerId,
 } from "./types";
 import { createAPIError, getPlans, isActive } from "./utils";
 
@@ -52,6 +54,8 @@ export const razorpay = <O extends RazorpayOptions>(options: O) => {
     resumeSubscription: resumeSubscription(options),
     listSubscriptions: listSubscriptions(options),
     updateSubscription: updateSubscription(options),
+    restoreSubscription: restoreSubscription(options),
+    getSubscription: getSubscription(options),
   };
 
   const razorpaySpecificEndpoints = {

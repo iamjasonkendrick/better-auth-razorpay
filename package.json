@@ -1,7 +1,7 @@
 {
   "name": "better-auth-razorpay",
   "author": "",
-  "version": "2.0.6",
+  "version": "2.0.7",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,21 +13,12 @@
   "keywords": [
     "better-auth",
     "razorpay",
-    "auth",
-    "subscription",
     "payments",
     "billing",
-    "saas",
-    "nextjs",
-    "typescript",
-    "plugin",
+    "subscription",
     "authentication",
-    "payment-gateway",
-    "india",
-    "inr",
-    "webhook",
-    "plans",
-    "trial"
+    "plugin",
+    "typescript"
   ],
   "module": "dist/index.js",
   "description": "Razorpay plugin for Better Auth",

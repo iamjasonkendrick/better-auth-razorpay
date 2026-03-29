@@ -11,10 +11,23 @@
     "url": "git+https://github.com/iamjasonkendrick/better-auth-razorpay.git"
   },
   "keywords": [
+    "better-auth",
     "razorpay",
     "auth",
     "subscription",
-    "better-auth"
+    "payments",
+    "billing",
+    "saas",
+    "nextjs",
+    "typescript",
+    "plugin",
+    "authentication",
+    "payment-gateway",
+    "india",
+    "inr",
+    "webhook",
+    "plans",
+    "trial"
   ],
   "module": "dist/index.js",
   "description": "Razorpay plugin for Better Auth",

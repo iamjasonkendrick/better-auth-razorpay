@@ -24,6 +24,7 @@ export const razorpaySessionMiddleware = createAuthMiddleware(
 export const referenceMiddleware = (
   subscriptionOptions: SubscriptionOptions,
   action: AuthorizeReferenceAction,
+  organizationEnabled = false,
 ) =>
   createAuthMiddleware(async (ctx) => {
     const ctxSession = ctx.context.session as RazorpayCtxSession;
@@ -36,6 +37,13 @@ export const referenceMiddleware = (
     const explicitReferenceId = ctx.body?.referenceId || ctx.query?.referenceId;
 
     if (customerType === "organization") {
+      if (!organizationEnabled) {
+        throw createAPIError(
+          "BAD_REQUEST",
+          RAZORPAY_ERROR_CODES.ORGANIZATION_SUBSCRIPTION_NOT_ENABLED,
+        );
+      }
+
       // Organization subscriptions always require authorizeReference
       if (!subscriptionOptions.authorizeReference) {
         ctx.context.logger.error(

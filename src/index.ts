@@ -1,6 +1,5 @@
-import type { BetterAuthPlugin, User } from "better-auth";
+import { APIError, type BetterAuthPlugin, type User } from "better-auth";
 import type { Organization } from "better-auth/plugins/organization";
-import { APIError } from "better-call";
 import { RAZORPAY_ERROR_CODES } from "./error-codes";
 import { customerNotes } from "./metadata";
 import {

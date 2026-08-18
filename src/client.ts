@@ -2,9 +2,7 @@ import type { BetterAuthClientPlugin } from "better-auth/client";
 import type { razorpay } from "./index";
 import type { RazorpayPlan } from "./types";
 export const razorpayClient = <
-  O extends {
-    subscription: boolean;
-  },
+  O extends { subscription?: boolean } = { subscription?: boolean },
 >(
   options?: O | undefined,
 ) => {
@@ -28,6 +26,9 @@ export const razorpayClient = <
       >
     >,
     pathMethods: {
+      "/subscription/upgrade": "POST",
+      "/subscription/cancel": "POST",
+      "/subscription/list": "GET",
       "/subscription/pause": "POST",
       "/subscription/resume": "POST",
       "/subscription/update": "POST",

@@ -1,4 +1,5 @@
-import { APIError } from "better-call";
+import { createHmac } from "node:crypto";
+import { APIError } from "better-auth";
 import { describe, expect, it, vi } from "vitest";
 import type { RazorpayOptions, RazorpayPlan } from "../types";
 import {
@@ -15,6 +16,7 @@ import {
   isUsable,
   timestampToDate,
   toSubscriptionStatus,
+  verifyRazorpayWebhookSignature,
 } from "../utils";
 
 // ─── Test Data ───────────────────────────────────────────────────────────────
@@ -54,9 +56,21 @@ describe("createAPIError", () => {
 
   it("sets body with message and code", () => {
     const err = createAPIError("UNAUTHORIZED", "No access");
-    expect(err.body).toMatchObject({
-      body: { message: "No access", code: "No access" },
+    expect(err.body).toMatchObject({ message: "No access", code: "NO_ACCESS" });
+    expect(err.message).toBe("No access");
+  });
+
+  it("preserves Better Auth error descriptors", () => {
+    const err = createAPIError("BAD_REQUEST", {
+      code: "RAZORPAY_ERROR",
+      message: "Razorpay failed",
     });
+
+    expect(err.body).toEqual({
+      code: "RAZORPAY_ERROR",
+      message: "Razorpay failed",
+    });
+    expect(err.message).toBe("Razorpay failed");
   });
 });
 
@@ -91,6 +105,34 @@ describe("getPlans", () => {
     await expect(getPlans(undefined)).rejects.toThrow(
       "Subscriptions are not enabled",
     );
+  });
+});
+
+// ─── verifyRazorpayWebhookSignature ──────────────────────────────────────────
+
+describe("verifyRazorpayWebhookSignature", () => {
+  it("accepts a valid Razorpay HMAC signature", () => {
+    const body = '{"event":"subscription.activated"}';
+    const secret = "webhook_secret";
+    const signature = createHmac("sha256", secret).update(body).digest("hex");
+
+    expect(verifyRazorpayWebhookSignature(body, signature, secret)).toBe(true);
+  });
+
+  it("rejects malformed signatures without throwing", () => {
+    expect(
+      verifyRazorpayWebhookSignature("body", "short", "webhook_secret"),
+    ).toBe(false);
+  });
+
+  it("rejects an incorrect signature", () => {
+    expect(
+      verifyRazorpayWebhookSignature(
+        "body",
+        "0".repeat(64),
+        "webhook_secret",
+      ),
+    ).toBe(false);
   });
 });
 

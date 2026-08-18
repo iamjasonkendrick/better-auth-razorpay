@@ -1,4 +1,5 @@
-import { APIError } from "better-call";
+import * as crypto from "node:crypto";
+import { APIError } from "better-auth";
 import type {
   RazorpayOptions,
   RazorpaySubscriptionStatus,
@@ -6,14 +7,21 @@ import type {
 } from "./types";
 
 /**
- * Create an APIError with the proper body format.
- * Replaces the monorepo-internal `APIError.from()` static method.
+ * Create an APIError using Better Auth's native error-code descriptor shape so
+ * server responses and client-side `error.message`/`error.code` stay useful.
  */
 export function createAPIError(
   status: ConstructorParameters<typeof APIError>[0],
-  message: string,
+  error: string | { code: string; message: string },
 ): APIError {
-  return new APIError(status, { body: { message, code: message } });
+  const body =
+    typeof error === "string"
+      ? {
+          code: error.toUpperCase().replace(/ /g, "_"),
+          message: error,
+        }
+      : error;
+  return new APIError(status, body);
 }
 
 export async function getPlans(
@@ -27,6 +35,33 @@ export async function getPlans(
   throw new Error("Subscriptions are not enabled in the Razorpay options.");
 }
 
+/**
+ * Verify a Razorpay webhook signature without allowing malformed input to
+ * reach crypto.timingSafeEqual with mismatched buffer lengths.
+ */
+export function verifyRazorpayWebhookSignature(
+  rawBody: string,
+  signature: string,
+  webhookSecret: string,
+): boolean {
+  const expectedSignature = crypto
+    .createHmac("sha256", webhookSecret)
+    .update(rawBody)
+    .digest("hex");
+  const signatureBuffer = Buffer.from(signature, "utf8");
+  const expectedBuffer = Buffer.from(expectedSignature, "utf8");
+
+  return (
+    signatureBuffer.length === expectedBuffer.length &&
+    crypto.timingSafeEqual(signatureBuffer, expectedBuffer)
+  );
+}
+
+/**
+ * Resolve the Razorpay customer for the billing entity represented by a
+ * subscription request. Organization billing reads from the organization
+ * record rather than from the authenticated user's customer ID.
+ */
 export async function getPlanByName(options: RazorpayOptions, name: string) {
   return await getPlans(options.subscription).then((res) =>
     res?.find((plan) => plan.name.toLowerCase() === name.toLowerCase()),

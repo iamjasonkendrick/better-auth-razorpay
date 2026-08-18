@@ -1,5 +1,3 @@
-import { defu } from "defu";
-
 /**
  * Razorpay uses `notes` (key-value pairs, max 15) instead of Stripe's `metadata`.
  */
@@ -21,6 +19,13 @@ type SubscriptionInternalNotes = {
   referenceId: string;
 };
 
+function mergeNotes(
+  internalFields: RazorpayNotes,
+  ...userNotes: (RazorpayNotes | undefined)[]
+): RazorpayNotes {
+  return Object.assign({}, ...userNotes.filter(Boolean), internalFields);
+}
+
 /**
  * Customer notes - set internal fields and extract typed fields.
  */
@@ -36,13 +41,13 @@ export const customerNotes = {
 
   /**
    * Create notes with internal fields that cannot be overridden by user notes.
-   * Uses `defu` which prioritizes the first argument.
+   * Internal fields always take precedence over user-provided notes.
    */
   set(
     internalFields: CustomerInternalNotes,
     ...userNotes: (RazorpayNotes | undefined)[]
   ): RazorpayNotes {
-    return defu(internalFields, ...userNotes.filter(Boolean)) as RazorpayNotes;
+    return mergeNotes(internalFields, ...userNotes);
   },
 
   /**
@@ -90,7 +95,7 @@ export const subscriptionNotes = {
     internalFields: SubscriptionInternalNotes,
     ...userNotes: (RazorpayNotes | undefined)[]
   ): RazorpayNotes {
-    return defu(internalFields, ...userNotes.filter(Boolean)) as RazorpayNotes;
+    return mergeNotes(internalFields, ...userNotes);
   },
 
   /**

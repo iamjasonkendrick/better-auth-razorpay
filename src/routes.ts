@@ -1,5 +1,6 @@
 import { createAuthEndpoint } from "@better-auth/core/api";
-import * as crypto from "node:crypto";
+import type { GenericEndpointContext } from "better-auth";
+import type { Organization } from "better-auth/plugins/organization";
 import { z } from "zod";
 import { RAZORPAY_ERROR_CODES } from "./error-codes";
 import {
@@ -20,6 +21,7 @@ import type {
   RazorpayOptions,
   RazorpayWebhookEvent,
   Subscription,
+  CustomerType,
   WithRazorpayCustomerId,
 } from "./types";
 import {
@@ -29,6 +31,7 @@ import {
   isCancelled,
   isPaused,
   isTerminal,
+  verifyRazorpayWebhookSignature,
 } from "./utils";
 
 // ─── Zod Schemas ─────────────────────────────────────────────────────────────
@@ -163,6 +166,93 @@ const fetchCustomerQuerySchema = z.object({
   customerId: z.string(),
 });
 
+async function getOrCreateRazorpayCustomerId(
+  ctx: GenericEndpointContext,
+  options: RazorpayOptions,
+  customerType: CustomerType,
+  referenceId: string,
+  user: WithRazorpayCustomerId,
+): Promise<string | undefined> {
+  if (customerType === "user") {
+    return user.razorpayCustomerId;
+  }
+
+  const organization = await ctx.context.adapter.findOne<
+    Organization & WithRazorpayCustomerId
+  >({
+    model: "organization",
+    where: [{ field: "id", value: referenceId }],
+  });
+
+  if (!organization) {
+    throw createAPIError(
+      "NOT_FOUND",
+      RAZORPAY_ERROR_CODES.ORGANIZATION_NOT_FOUND,
+    );
+  }
+
+  if (organization.razorpayCustomerId) {
+    return organization.razorpayCustomerId;
+  }
+
+  if (!options.organization?.enabled) {
+    throw createAPIError(
+      "BAD_REQUEST",
+      RAZORPAY_ERROR_CODES.ORGANIZATION_SUBSCRIPTION_NOT_ENABLED,
+    );
+  }
+
+  try {
+    const customerParams: Record<string, unknown> = {
+      name: organization.name,
+    };
+    const customParams = await options.organization.getCustomerCreateParams?.(
+      organization,
+      ctx,
+    );
+    Object.assign(customerParams, customParams);
+
+    const razorpayCustomer = await (
+      options.razorpayClient.customers as any
+    ).create(customerParams);
+
+    await ctx.context.adapter.update({
+      model: "organization",
+      update: { razorpayCustomerId: razorpayCustomer.id },
+      where: [{ field: "id", value: referenceId }],
+    });
+
+    try {
+      await options.organization.onCustomerCreate?.(
+        {
+          razorpayCustomer,
+          organization: {
+            ...organization,
+            razorpayCustomerId: razorpayCustomer.id,
+          },
+        },
+        ctx,
+      );
+    } catch (error: any) {
+      // The Razorpay customer and local link are already durable. Do not turn
+      // a callback failure into a failed subscription request.
+      ctx.context.logger.error(
+        `Razorpay organization customer callback failed: ${error.message}`,
+      );
+    }
+
+    return razorpayCustomer.id;
+  } catch (error: any) {
+    ctx.context.logger.error(
+      `Failed to create Razorpay organization customer: ${error.message}`,
+    );
+    throw createAPIError(
+      "INTERNAL_SERVER_ERROR",
+      RAZORPAY_ERROR_CODES.UNABLE_TO_CREATE_CUSTOMER,
+    );
+  }
+}
+
 // ─── Subscription Endpoints ──────────────────────────────────────────────────
 
 /**
@@ -194,7 +284,11 @@ export const upgradeSubscription = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "upgrade-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "upgrade-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -245,7 +339,13 @@ export const upgradeSubscription = (options: RazorpayOptions) => {
       }
 
       // Check for customer
-      const razorpayCustomerId = user.razorpayCustomerId;
+      const razorpayCustomerId = await getOrCreateRazorpayCustomerId(
+        ctx,
+        options,
+        customerType,
+        referenceId,
+        user,
+      );
       if (!razorpayCustomerId) {
         throw createAPIError(
           "BAD_REQUEST",
@@ -319,7 +419,6 @@ export const upgradeSubscription = (options: RazorpayOptions) => {
 
       const subscriptionCreateParams: Record<string, unknown> = {
         plan_id: razorpayPlanId,
-        customer_id: razorpayCustomerId,
         quantity: plan.quantity || 1,
         total_count: plan.totalCount || 0,
         notes: subscriptionNotes.set({
@@ -422,7 +521,11 @@ export const cancelSubscription = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "cancel-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "cancel-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -523,7 +626,11 @@ export const pauseSubscription = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "pause-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "pause-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -624,7 +731,11 @@ export const resumeSubscription = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "resume-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "resume-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -719,7 +830,11 @@ export const listSubscriptions = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "list-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "list-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -773,7 +888,11 @@ export const updateSubscription = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "update-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "update-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -879,7 +998,11 @@ export const restoreSubscription = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "restore-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "restore-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -972,7 +1095,11 @@ export const getSubscription = (options: RazorpayOptions) => {
       },
       use: [
         razorpaySessionMiddleware,
-        referenceMiddleware(subscriptionOptions, "get-subscription"),
+        referenceMiddleware(
+          subscriptionOptions,
+          "get-subscription",
+          options.organization?.enabled,
+        ),
       ],
     },
     async (ctx) => {
@@ -1613,18 +1740,7 @@ export const razorpayWebhook = (options: RazorpayOptions) => {
         rawBody = JSON.stringify(ctx.body);
       }
 
-      // Verify HMAC-SHA256 signature
-      const expectedSignature = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(rawBody)
-        .digest("hex");
-
-      const isValid = crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSignature),
-      );
-
-      if (!isValid) {
+      if (!verifyRazorpayWebhookSignature(rawBody, signature, webhookSecret)) {
         throw createAPIError(
           "BAD_REQUEST",
           RAZORPAY_ERROR_CODES.FAILED_TO_VERIFY_WEBHOOK,

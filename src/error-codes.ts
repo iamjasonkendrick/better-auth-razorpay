@@ -7,7 +7,7 @@ export const RAZORPAY_ERROR_CODES = defineErrorCodes({
   SUBSCRIPTION_PLAN_NOT_FOUND: "Subscription plan not found",
   ALREADY_SUBSCRIBED_PLAN: "You're already subscribed to this plan",
   REFERENCE_ID_NOT_ALLOWED: "Reference id is not allowed",
-  CUSTOMER_NOT_FOUND: "Razorpay customer not found for this user",
+  CUSTOMER_NOT_FOUND: "Razorpay customer not found for the billing reference",
   UNABLE_TO_CREATE_CUSTOMER: "Unable to create Razorpay customer",
   WEBHOOK_SIGNATURE_NOT_FOUND: "Razorpay webhook signature not found",
   WEBHOOK_SECRET_NOT_FOUND: "Razorpay webhook secret not found",

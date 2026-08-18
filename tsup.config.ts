@@ -7,7 +7,6 @@ export default defineConfig({
   clean: true,
   external: [
     "better-auth",
-    "better-call",
     "@better-fetch/fetch",
     "razorpay",
     "@tanstack/react-query",

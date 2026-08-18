@@ -61,8 +61,8 @@ describe("RAZORPAY_ERROR_CODES", () => {
 
   it("all error codes are non-empty strings", () => {
     for (const [key, value] of Object.entries(RAZORPAY_ERROR_CODES)) {
-      expect(typeof value).toBe("string");
-      expect((value as string).length).toBeGreaterThan(0);
+      expect(value).toMatchObject({ code: key });
+      expect(value.message.length).toBeGreaterThan(0);
     }
   });
 

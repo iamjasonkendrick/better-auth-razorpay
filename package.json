@@ -1,7 +1,7 @@
 {
   "name": "better-auth-razorpay",
-  "author": "",
-  "version": "2.0.7",
+  "author": "Jason Richard Kendrick",
+  "version": "2.0.8",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,10 +18,23 @@
     "subscription",
     "authentication",
     "plugin",
-    "typescript"
+    "typescript",
+    "better-auth-plugin",
+    "razorpay-subscriptions",
+    "recurring-billing",
+    "organization-billing",
+    "team-billing",
+    "seat-based-billing",
+    "webhooks",
+    "react-query"
   ],
   "module": "dist/index.js",
   "description": "Razorpay plugin for Better Auth",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "test": "vitest",
     "coverage": "vitest run --coverage --coverage.provider=istanbul",
@@ -65,13 +78,12 @@
     }
   },
   "dependencies": {
-    "defu": "^6.1.4",
     "zod": "^4.3.6"
   },
   "peerDependencies": {
-    "better-auth": "*",
-    "razorpay": "^2.9.0",
     "@tanstack/react-query": "^5.0.0",
+    "better-auth": ">=1.7.0 <2",
+    "razorpay": "^2.9.0",
     "react": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
@@ -82,15 +94,19 @@
       "optional": true
     }
   },
+  "overrides": {
+    "esbuild": "^0.28.2",
+    "rollup": "^4.62.4"
+  },
   "devDependencies": {
     "@tanstack/react-query": "^5.80.7",
     "@types/node": "^25.2.3",
     "@types/react": "^19.2.14",
-    "better-auth": "^1.2.10",
-    "better-call": "^1.0.10",
-    "razorpay": "^2.9.6",
+    "better-auth": "^1.7.0",
+    "razorpay": "^2.9.8",
     "tsup": "^8.5.1",
     "typescript": "^5.8.3",
-    "vitest": "^4.0.18"
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
   }
 }

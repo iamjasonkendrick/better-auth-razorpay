@@ -368,6 +368,7 @@ razorpay({
 ### What the organization integration does automatically:
 
 - **Syncs organization name** to Razorpay customer when the org is updated
+- **Creates the organization customer lazily** on its first subscription and persists the Razorpay customer ID
 - **Blocks deletion** of organizations with active subscriptions
 - **Syncs seat count** when members are added/removed/accept invitations
 - Adds `razorpayCustomerId` field to the `organization` table
@@ -492,6 +493,10 @@ All error codes are exported and can be used for client-side matching:
 
 ```ts
 import { RAZORPAY_ERROR_CODES } from "better-auth-razorpay/client";
+
+if (error?.code === RAZORPAY_ERROR_CODES.CUSTOMER_NOT_FOUND.code) {
+  // Handle the missing billing customer.
+}
 ```
 
 | Code                                   | Message                                        |
@@ -520,7 +525,7 @@ import { RAZORPAY_ERROR_CODES } from "better-auth-razorpay/client";
 | `SUBSCRIPTION_PLAN_NOT_FOUND`           | Subscription plan not found                   |
 | `ALREADY_SUBSCRIBED_PLAN`               | You're already subscribed to this plan        |
 | `REFERENCE_ID_NOT_ALLOWED`              | Reference id is not allowed                   |
-| `CUSTOMER_NOT_FOUND`                    | Razorpay customer not found for this user     |
+| `CUSTOMER_NOT_FOUND`                    | Razorpay customer not found for the billing reference |
 | `UNABLE_TO_CREATE_CUSTOMER`             | Unable to create Razorpay customer            |
 | `WEBHOOK_SIGNATURE_NOT_FOUND`           | Razorpay webhook signature not found          |
 | `WEBHOOK_SECRET_NOT_FOUND`              | Razorpay webhook secret not found             |
